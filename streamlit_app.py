@@ -1,40 +1,69 @@
-import altair as alt
-import numpy as np
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import sqlite3
 
-"""
-# Welcome to Streamlit!
+# Function to connect to the database
+def init_db(conn):
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS books (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book_name TEXT,
+            book_no TEXT,
+            student_name TEXT,
+            matrikel_number TEXT
+        );
+    """)
+    conn.commit()
 
-Edit `/streamlit_app.py` to customize this app to your heart's desire :heart:.
-If you have any questions, checkout our [documentation](https://docs.streamlit.io) and [community
-forums](https://discuss.streamlit.io).
+# Function to add a new entry to the database
+def add_book(conn, book_name, book_no, student_name, matrikel_number):
+    conn.execute("""
+        INSERT INTO books (book_name, book_no, student_name, matrikel_number)
+        VALUES (?, ?, ?, ?);
+    """, (book_name, book_no, student_name, matrikel_number))
+    conn.commit()
 
-In the meantime, below is an example of what you can do with just a few lines of code:
-"""
+# Function to delete an entry from the database
+def delete_book(conn, book_id):
+    conn.execute("DELETE FROM books WHERE id = ?;", (book_id,))
+    conn.commit()
 
-num_points = st.slider("Number of points in spiral", 1, 10000, 1100)
-num_turns = st.slider("Number of turns in spiral", 1, 300, 31)
+# Function to get all book entries from the database
+def get_all_books(conn):
+    cursor = conn.execute("SELECT * FROM books;")
+    data = cursor.fetchall()
+    return data
 
-indices = np.linspace(0, 1, num_points)
-theta = 2 * np.pi * num_turns * indices
-radius = indices
+# Initialize the database
+conn = sqlite3.connect('library.db')
+init_db(conn)
 
-x = radius * np.cos(theta)
-y = radius * np.sin(theta)
+# Streamlit UI
+st.title("Library Management System MVP")
 
-df = pd.DataFrame({
-    "x": x,
-    "y": y,
-    "idx": indices,
-    "rand": np.random.randn(num_points),
-})
+# Input form
+with st.form("book_form", clear_on_submit=True):
+    book_name = st.text_input("Book Name")
+    book_no = st.text_input("Book No")
+    student_name = st.text_input("Student Name")
+    matrikel_number = st.text_input("Matrikel Number")
+    submit_button = st.form_submit_button("Add Book")
 
-st.altair_chart(alt.Chart(df, height=700, width=700)
-    .mark_point(filled=True)
-    .encode(
-        x=alt.X("x", axis=None),
-        y=alt.Y("y", axis=None),
-        color=alt.Color("idx", legend=None, scale=alt.Scale()),
-        size=alt.Size("rand", legend=None, scale=alt.Scale(range=[1, 150])),
-    ))
+if submit_button:
+    add_book(conn, book_name, book_no, student_name, matrikel_number)
+    st.success("Book added successfully!")
+
+# Display books in a table
+books = get_all_books(conn)
+books_df = pd.DataFrame(books, columns=["ID", "Book Name", "Book No", "Student Name", "Matrikel Number"])
+st.write(books_df)
+
+# Delete book
+book_id_to_delete = st.selectbox("Select a Book ID to delete", [book[0] for book in books])
+if st.button("Delete Book"):
+    delete_book(conn, book_id_to_delete)
+    st.success(f"Book with ID {book_id_to_delete} deleted successfully!")
+    st.experimental_rerun()
+
+# Close the database connection when the script completes
+conn.close()
